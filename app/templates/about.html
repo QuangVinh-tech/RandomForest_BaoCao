@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}EPL Predictor – Giới thiệu{% endblock %}
+
+{% block content %}
+<h1 style="font-size:28px">Giới thiệu về dự án</h1>
+<p class="muted">Tìm hiểu về mô hình, dữ liệu và công nghệ được sử dụng.</p>
+
+<section class="card" style="margin-top:20px">
+  <h2>Về dự án</h2>
+  <p>EPL Predictor là ứng dụng dự đoán kết quả các trận đấu Ngoại hạng Anh (thắng, hòa, thua) bằng thuật toán Random Forest. Dự án được thực hiện cho môn Khai phá dữ liệu, áp dụng quy trình: thu thập và làm sạch dữ liệu, xây dựng đặc trưng, huấn luyện, đánh giá và triển khai thành ứng dụng web.</p>
+  <p class="note" id="a-note"></p>
+</section>
+
+<section class="card" style="margin-top:16px">
+  <h2>Quy trình thực hiện</h2>
+  <ol class="steps">
+    <li><b>Dữ liệu:</b> 5 mùa giải 2020/21 đến 2024/25 (1.900 trận) từ Football-Data.co.uk, làm sạch và chuẩn hóa ngày, tên đội.</li>
+    <li><b>Đặc trưng:</b> trung bình 5 trận gần nhất (điểm, bàn thắng, bàn thua, sút trúng đích, số trận thắng) và điểm Elo của từng đội. Mọi đặc trưng chỉ dùng thông tin trước trận đấu để tránh rò rỉ dữ liệu.</li>
+    <li><b>Huấn luyện:</b> Random Forest, chọn tham số bằng cross-validation theo thời gian (TimeSeriesSplit).</li>
+    <li><b>Đánh giá:</b> holdout trên mùa 2024/25 và walk-forward qua 4 mùa; so sánh với mốc cơ sở luôn đoán chủ nhà thắng.</li>
+    <li><b>Triển khai:</b> backend Flask cung cấp API dự đoán, giao diện web hiển thị xác suất thắng, hòa, thua.</li>
+  </ol>
+</section>
+
+<section class="card" style="margin-top:16px">
+  <h2>Công nghệ sử dụng</h2>
+  <div class="tech">
+    <div><b>Python</b>Ngôn ngữ lập trình</div>
+    <div><b>Flask</b>Backend, API</div>
+    <div><b>scikit-learn</b>Random Forest</div>
+    <div><b>Pandas</b>Xử lý dữ liệu</div>
+    <div><b>HTML/CSS/JS</b>Giao diện</div>
+  </div>
+</section>
+
+<section class="grid c2" style="margin-top:16px">
+  <div class="card">
+    <h2>Hạn chế cần lưu ý</h2>
+    <ul>
+      <li>Bóng đá có tính ngẫu nhiên cao, mô hình thường chỉ đạt khoảng 50 đến 58% độ chính xác.</li>
+      <li>Mô hình không dự đoán nhãn "Hòa"; hãy xem xác suất hòa thay vì nhãn.</li>
+      <li>Chưa xét chấn thương, đội hình, chuyển nhượng hay lịch thi đấu dày.</li>
+      <li>Dữ liệu dừng ở hết mùa 2024/25. Kết quả chỉ mang tính tham khảo, không dùng để cá cược.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Tác giả</h2>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:10px">
+      <span class="badge" style="--c:#10b981;width:64px;height:64px;font-size:22px">V</span>
+      <div><b>Vinh</b><div class="muted">Thực hiện toàn bộ dự án: dữ liệu, mô hình, backend và giao diện</div></div>
+    </div>
+    <p class="note" style="margin-top:16px">Mã nguồn: <a class="green" href="https://github.com/QuangVinh-tech/RandomForest_BaoCao" target="_blank" rel="noopener">github.com/QuangVinh-tech/RandomForest_BaoCao</a></p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+api("/api/summary").then(s => {
+  document.getElementById("a-note").textContent =
+    `Kết quả hiện tại: độ chính xác ${s.accuracy}% trên mùa ${s.test_season}, so với mốc cơ sở ${s.baseline}%.`;
+}).catch(console.error);
+</script>
+{% endblock %}

@@ -28,7 +28,7 @@ def to_int(value, default, lo, hi):
         return default
 
 
-# ---------- Trang ----------
+
 # ---------- Trang ----------
 @app.get("/")
 def index():
@@ -39,6 +39,14 @@ def index():
 def predict_page():
     return render_template("predict.html")
 
+@app.get("/stats")
+def stats_page():
+    return render_template("stats.html")
+
+
+@app.get("/about")
+def about_page():
+    return render_template("about.html")
 
 # ---------- API ----------
 @app.get("/api/summary")
@@ -93,6 +101,7 @@ def history():
                         "accuracy": None, "seasons": []})
 
     seasons = sorted(df["Season"].unique())
+    teams = sorted(set(df["HomeTeam"]) | set(df["AwayTeam"]))
     team = request.args.get("team")
     result = request.args.get("result")
     season = request.args.get("season")
@@ -128,7 +137,8 @@ def history():
     } for r in chunk.itertuples(index=False)]
 
     return jsonify({"items": items, "total": total, "pages": pages,
-                    "page": page, "accuracy": acc, "seasons": seasons})
+                    "page": page, "accuracy": acc, "seasons": seasons,
+                    "teams": teams})
 
 
 if __name__ == "__main__":

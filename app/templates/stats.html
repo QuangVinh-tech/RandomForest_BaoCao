@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}EPL Predictor – Thống kê{% endblock %}
+
+{% block content %}
+<h1 style="font-size:28px">Thống kê &amp; Lịch sử dự đoán</h1>
+<p class="muted">Mỗi trận trong lịch sử được dự đoán bởi mô hình chỉ huấn luyện trên các mùa trước đó (walk-forward), nên kết quả không bị "biết trước".</p>
+
+<div class="split" style="margin-top:20px">
+  <section class="card">
+    <div class="tabs">
+      <div class="tab active" data-tab="history">Lịch sử dự đoán</div>
+      <div class="tab" data-tab="model">Thống kê mô hình</div>
+      <div class="tab" data-tab="chart">Biểu đồ</div>
+    </div>
+
+    <!-- Tab 1: Lịch sử -->
+    <div id="tab-history">
+      <div class="filters">
+        <div><label>Đội bóng</label><select id="f-team"><option value="">Tất cả đội</option></select></div>
+        <div><label>Kết quả thực tế</label>
+          <select id="f-result">
+            <option value="">Tất cả</option><option value="H">Chủ nhà thắng</option>
+            <option value="D">Hòa</option><option value="A">Khách thắng</option>
+          </select></div>
+        <div><label>Mùa giải</label><select id="f-season"><option value="">Tất cả mùa</option></select></div>
+        <div><label>Từ ngày</label><input type="date" id="f-from"></div>
+        <div><label>Đến ngày</label><input type="date" id="f-to"></div>
+        <button class="btn" id="f-go">Tìm kiếm</button>
+      </div>
+      <p class="note" id="h-summary"></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ngày</th><th>Trận đấu</th><th>Dự đoán</th><th>Thực tế</th><th>Đúng/Sai</th></tr></thead>
+          <tbody id="h-body"><tr><td colspan="5" class="muted">Đang tải...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="pager" id="h-pager"></div>
+    </div>
+
+    <!-- Tab 2: Thống kê mô hình -->
+    <div id="tab-model" class="hidden">
+      <table class="kv" id="m-table"></table>
+      <p class="note" style="margin-top:14px">Mô hình không bao giờ dự đoán nhãn "Hòa" vì xác suất hòa hiếm khi vượt xác suất thắng của một bên. Vì vậy ba xác suất được hiển thị trên trang Dự đoán hữu ích hơn nhãn dự đoán đơn lẻ.</p>
+    </div>
+
+    <!-- Tab 3: Biểu đồ -->
+    <div id="tab-chart" class="hidden">
+      <h3>Mức độ quan trọng của đặc trưng</h3>
+      <div class="bars" id="imp"></div>
+      <p class="note">Điểm Elo (sức mạnh dài hạn) quan trọng hơn phong độ 5 trận gần nhất.</p>
+    </div>
+  </section>
+
+  <aside style="display:grid;gap:16px">
+    <div class="card" style="text-align:center">
+      <h3>Hiệu suất mô hình</h3>
+      <div class="gauge" id="gauge"><div><b id="g-acc">–</b><small class="muted">Độ chính xác</small></div></div>
+      <p class="note" id="g-note"></p>
+    </div>
+    <div class="card">
+      <h3>Ma trận nhầm lẫn</h3>
+      <table class="cm" id="cm"></table>
+      <p class="note">Hàng = thực tế, cột = dự đoán (mùa test).</p>
+    </div>
+    <div class="card">
+      <h3>Độ chính xác theo mùa</h3>
+      <div class="vbars" id="vbars"></div>
+      <div class="vlabels" id="vlabels"></div>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+const NAME = {
+  elo_diff: "Chênh lệch Elo", h_elo: "Elo chủ nhà", a_elo: "Elo khách",
+  gd_diff: "Chênh lệch hiệu số bàn", pts_diff: "Chênh lệch điểm phong độ",
+  h_sot: "Sút trúng đích (nhà)", a_sot: "Sút trúng đích (khách)",
+  h_pts: "Điểm TB 5 trận (nhà)", a_pts: "Điểm TB 5 trận (khách)",
+  h_gf: "Bàn thắng TB (nhà)", a_gf: "Bàn thắng TB (khách)",
+  h_ga: "Bàn thua TB (nhà)", a_ga: "Bàn thua TB (khách)",
+  h_wins: "Số trận thắng/5 (nhà)", a_wins: "Số trận thắng/5 (khách)"
+};
+let filled = false;
+
+function outcome(code, home, away) {
+  return code === "H" ? `${home} thắng` : code === "A" ? `${away} thắng` : "Hòa";
+}
+
+/* ---- Tabs ---- */
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === t));
+  for (const id of ["history", "model", "chart"])
+    $("tab-" + id).classList.toggle("hidden", id !== t.dataset.tab);
+}));
+
+/* ---- Lịch sử ---- */
+async function loadHistory(page = 1) {
+  const p = new URLSearchParams({page, per_page: 10});
+  const f = {team: $("f-team").value, result: $("f-result").value, season: $("f-season").value,
+             from: $("f-from").value, to: $("f-to").value};
+  for (const [k, v] of Object.entries(f)) if (v) p.set(k, v);
+
+  const d = await api("/api/history?" + p);
+  if (!filled) {
+    $("f-team").insertAdjacentHTML("beforeend", (d.teams || []).map(t => `<option>${esc(t)}</option>`).join(""));
+    $("f-season").insertAdjacentHTML("beforeend", d.seasons.map(s => `<option>${esc(s)}</option>`).join(""));
+    filled = true;
+  }
+
+  $("h-summary").textContent = d.total
+    ? `${d.total} trận · độ chính xác của kết quả đang lọc: ${d.accuracy}%`
+    : "Không có trận nào phù hợp bộ lọc.";
+
+  $("h-body").innerHTML = d.items.length ? d.items.map(it => `
+    <tr>
+      <td>${it.date}</td>
+      <td><span class="cell-team">${badge(it.home, 24)} ${esc(it.home)} <b>${it.score}</b> ${esc(it.away)} ${badge(it.away, 24)}</span></td>
+      <td>${esc(outcome(it.pred, it.home, it.away))}<div class="note">${it.p_h}% / ${it.p_d}% / ${it.p_a}%</div></td>
+      <td>${esc(outcome(it.actual, it.home, it.away))}</td>
+      <td><span class="pill ${it.correct ? "ok" : "no"}">${it.correct ? "Đúng" : "Sai"}</span></td>
+    </tr>`).join("") : `<tr><td colspan="5" class="muted">Không có dữ liệu.</td></tr>`;
+
+  renderPager(d.page, d.pages);
+}
+
+function renderPager(page, pages) {
+  const btn = (label, p, dis = false, act = false) =>
+    `<button ${dis ? "disabled" : ""} class="${act ? "active" : ""}" data-p="${p}">${label}</button>`;
+  let html = btn("‹", page - 1, page <= 1);
+  const start = Math.max(1, page - 2), end = Math.min(pages, page + 2);
+  if (start > 1) html += btn(1, 1) + (start > 2 ? "<span>…</span>" : "");
+  for (let i = start; i <= end; i++) html += btn(i, i, false, i === page);
+  if (end < pages) html += (end < pages - 1 ? "<span>…</span>" : "") + btn(pages, pages);
+  html += btn("›", page + 1, page >= pages);
+  $("h-pager").innerHTML = html;
+  $("h-pager").querySelectorAll("button:not([disabled])").forEach(b =>
+    b.addEventListener("click", () => loadHistory(+b.dataset.p)));
+}
+$("f-go").addEventListener("click", () => loadHistory(1));
+
+/* ---- Mô hình ---- */
+async function loadModel() {
+  const m = await api("/api/metrics");
+  const pct = v => (v * 100).toFixed(1) + "%";
+
+  $("g-acc").textContent = pct(m.accuracy);
+  $("gauge").style.setProperty("--p", (m.accuracy * 100).toFixed(1));
+  $("g-note").textContent = `Mùa ${m.test_season} · mốc cơ sở (luôn đoán chủ nhà thắng): ${pct(m.baseline)}`;
+
+  const order = ["H", "D", "A"], vn = {H: "Thắng", D: "Hòa", A: "Thua"};
+  const idx = c => m.labels.indexOf(c);
+  let cm = "<tr><th></th><th></th>" + order.map(c => `<th>${vn[c]}</th>`).join("") + "</tr>";
+  order.forEach((r, i) => {
+    cm += `<tr>${i === 0 ? '<th rowspan="3">Thực tế</th>' : ""}<th>${vn[r]}</th>` +
+      order.map(c => `<td class="${r === c ? "diag" : ""}">${m.confusion_matrix[idx(r)][idx(c)]}</td>`).join("") + "</tr>";
+  });
+  $("cm").innerHTML = cm;
+
+  const seasons = Object.entries(m.per_season_accuracy);
+  $("vbars").innerHTML = seasons.map(([s, v]) =>
+    `<div class="col"><span>${(v * 100).toFixed(1)}%</span><i style="height:${(v * 100).toFixed(0)}%"></i></div>`).join("");
+  $("vlabels").innerHTML = seasons.map(([s]) => `<span>${s}</span>`).join("");
+
+  const p = m.params;
+  $("m-table").innerHTML = `
+    <tr><td>Mùa dùng để kiểm tra (holdout)</td><td>${m.test_season}</td></tr>
+    <tr><td>Số trận huấn luyện / kiểm tra</td><td>${m.n_train} / ${m.n_test}</td></tr>
+    <tr><td>Độ chính xác</td><td>${pct(m.accuracy)}</td></tr>
+    <tr><td>Mốc cơ sở (luôn đoán chủ nhà thắng)</td><td>${pct(m.baseline)}</td></tr>
+    <tr><td>F1 macro</td><td>${m.f1_macro.toFixed(3)}</td></tr>
+    <tr><td>Log loss</td><td>${m.log_loss.toFixed(3)}</td></tr>
+    <tr><td>Số cây (n_estimators)</td><td>${p.n_estimators}</td></tr>
+    <tr><td>Tiêu chí chia nút (criterion)</td><td>${p.criterion}</td></tr>
+    <tr><td>Độ sâu tối đa (max_depth)</td><td>${p.max_depth === null ? "Không giới hạn" : p.max_depth}</td></tr>
+    <tr><td>Mẫu tối thiểu ở nút lá (min_samples_leaf)</td><td>${p.min_samples_leaf}</td></tr>`;
+
+  const imp = Object.entries(m.feature_importance);
+  const mx = Math.max(...imp.map(x => x[1]));
+  $("imp").innerHTML = imp.map(([k, v]) => `
+    <div class="row"><div class="lab"><span>${esc(NAME[k] || k)}</span><b>${(v * 100).toFixed(1)}%</b></div>
+    <div class="bar"><i style="width:${(v / mx * 100).toFixed(0)}%;background:var(--accent)"></i></div></div>`).join("");
+}
+
+loadHistory().catch(e => $("h-body").innerHTML = `<tr><td colspan="5" class="red">${esc(e.message)}</td></tr>`);
+loadModel().catch(console.error);
+</script>
+{% endblock %}
