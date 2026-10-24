@@ -18,7 +18,12 @@ function teamColor(name) {
 
 function badge(name, size = 40) {
   const code = TEAM_CODES[name] || name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase();
-  return `<span class="badge" style="--c:${teamColor(name)};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.3)}px">${code}</span>`;
+  const fs = Math.round(size * 0.3);
+  return `<span class="crest" style="width:${size}px;height:${size}px">` +
+    `<span class="badge" style="--c:${teamColor(name)};width:100%;height:100%;font-size:${fs}px">${code}</span>` +
+    `<img src="/static/img/teams/${code.toLowerCase()}.png" alt="${esc(name)}" loading="lazy" ` +
+    `onload="this.previousElementSibling.style.display='none'" onerror="this.remove()">` +
+    `</span>`;
 }
 
 async function api(url, options) {

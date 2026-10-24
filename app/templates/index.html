@@ -3,6 +3,8 @@
 
 {% block content %}
 <section class="hero">
+      <img class="hero-logo" src="{{ url_for('static', filename='img/premier-league.png') }}"
+       alt="Premier League" onerror="this.remove()">
   <h1>Dự đoán kết quả <span class="green">Ngoại hạng Anh</span><br>bằng mô hình <span class="green">Random Forest</span></h1>
   <p></p>
   <a class="btn" href="/predict">Bắt đầu dự đoán →</a>

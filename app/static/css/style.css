@@ -131,3 +131,45 @@ td .cell-team { display: inline-flex; align-items: center; gap: 8px; }
   .hero { padding: 34px 22px; } .hero h1 { font-size: 27px; }
   .prob-box { padding: 12px 14px; min-width: 84px; }
 }
+.split { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+.kv { width: 100%; font-size: 14px; }
+.kv td { padding: 9px 4px; border-bottom: 1px solid #14281e; white-space: normal; }
+.kv td:last-child { text-align: right; font-weight: 700; }
+.tech { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.tech div { background: #0a1a12; border: 1px solid var(--line); border-radius: 10px; padding: 16px 8px; text-align: center; font-size: 14px; }
+.tech b { display: block; font-size: 20px; margin-bottom: 4px; color: var(--accent); }
+.steps { counter-reset: s; padding: 0; list-style: none; }
+.steps li { counter-increment: s; padding: 10px 0 10px 44px; position: relative; border-bottom: 1px solid #14281e; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 9px; width: 28px; height: 28px; border-radius: 50%;
+  background: #12402a; color: var(--accent); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+@media (max-width: 860px) {
+  .split { grid-template-columns: 1fr; }
+  .tech { grid-template-columns: repeat(2, 1fr); }
+}
+.crest { position: relative; display: inline-flex; flex: none; vertical-align: middle; }
+.crest img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  background: #fff; border-radius: 50%; padding: 12%; box-sizing: border-box; }
+.brand img { height: 30px; width: auto; max-width: 60px; object-fit: contain;
+  background: #fff; border-radius: 8px; padding: 3px 6px; }
+
+.hero-logo { position: absolute; right: 60px; top: 50%; transform: translateY(-50%);
+  height: 190px; width: auto; max-width: 34%; object-fit: contain;
+  background: #fff; border-radius: 18px; padding: 16px 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+
+@media (max-width: 860px) { .hero-logo { display: none; } }
+/* Banner có ảnh nền */
+.hero { min-height: 420px; display: flex; flex-direction: column; justify-content: center;
+  background:
+    linear-gradient(90deg, rgba(8, 19, 14, .94) 0%, rgba(8, 19, 14, .6) 42%, rgba(8, 19, 14, 0) 68%),
+    url("../img/hero.jpg") center 15% / cover no-repeat,
+    var(--card); }
+.hero > * { position: relative; z-index: 1; }
+.hero .hero-logo { position: static; transform: none; right: auto; top: auto;
+  height: 56px; width: auto; max-width: none; align-self: flex-start;
+  padding: 8px 14px; margin-bottom: 20px; border-radius: 12px; }
+.hero .btn { align-self: flex-start; }
+@media (max-width: 860px) {
+  .hero { min-height: 360px; background-position: 70% 15%; }
+  .hero .hero-logo { display: block; height: 44px; }
+}
