@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}EPL Predictor – Trang chủ{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Dự đoán kết quả <span class="green">Ngoại hạng Anh</span><br>bằng mô hình <span class="green">Random Forest</span></h1>
+  <p>Ứng dụng Machine Learning phân tích dữ liệu 5 mùa giải, dự đoán xác suất thắng, hòa, thua của các trận đấu Ngoại hạng Anh.</p>
+  <a class="btn" href="/predict">Bắt đầu dự đoán →</a>
+</section>
+
+<section class="grid c4" style="margin-top:20px">
+  <div class="card stat"><b id="s-matches">–</b><span>Trận đã phân tích</span></div>
+  <div class="card stat"><b id="s-acc">–</b><span id="s-acc-note">Độ chính xác mô hình</span></div>
+  <div class="card stat"><b id="s-teams">–</b><span>Đội bóng mùa mới nhất</span></div>
+  <div class="card stat"><b id="s-seasons">–</b><span>Mùa giải dữ liệu</span></div>
+</section>
+
+<div class="section-title">
+  <h2>Cặp đấu tiêu biểu</h2>
+  <a class="green" href="/predict">Tự chọn cặp đấu →</a>
+</div>
+<section class="grid c4" id="featured"></section>
+<p class="note" style="margin-top:14px">Dự đoán dựa trên phong độ 5 trận gần nhất và điểm Elo tính đến hết dữ liệu mùa 2024/25.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PAIRS = [["Liverpool", "Chelsea"], ["Arsenal", "Man City"],
+               ["Man United", "Newcastle"], ["Tottenham", "Aston Villa"]];
+
+async function init() {
+  try {
+    const s = await api("/api/summary");
+    document.getElementById("s-matches").textContent = s.matches.toLocaleString("vi-VN");
+    document.getElementById("s-acc").textContent = s.accuracy + "%";
+    document.getElementById("s-acc-note").textContent =
+      `Độ chính xác (mùa ${s.test_season}, mốc cơ sở ${s.baseline}%)`;
+    document.getElementById("s-teams").textContent = s.teams;
+    document.getElementById("s-seasons").textContent = s.seasons;
+  } catch (e) { console.error(e); }
+
+  const box = document.getElementById("featured");
+  for (const [home, away] of PAIRS) {
+    try {
+      const r = await api("/api/predict", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({home, away})
+      });
+      box.insertAdjacentHTML("beforeend", `
+        <div class="card match">
+          <div class="teams">
+            <div>${badge(home, 48)}<br><small>${esc(home)}</small></div>
+            <span class="vs">VS</span>
+            <div>${badge(away, 48)}<br><small>${esc(away)}</small></div>
+          </div>
+          <div class="mini-probs">
+            <div class="green"><b>${r.home_win}%</b><br><small>Thắng</small></div>
+            <div><b>${r.draw}%</b><br><small>Hòa</small></div>
+            <div class="red"><b>${r.away_win}%</b><br><small>Thua</small></div>
+          </div>
+          <a class="btn small" href="/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}">Dự đoán ngay</a>
+        </div>`);
+    } catch (e) { console.error(e); }
+  }
+}
+init();
+</script>
+{% endblock %}

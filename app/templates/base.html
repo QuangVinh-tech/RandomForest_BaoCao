@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}EPL Predictor{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/"><span class="logo">⚽</span> EPL Predictor</a>
+    <button class="nav-toggle" aria-label="Menu"
+            onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+    <nav class="nav-links">
+      {% set items = [('/', 'Trang chủ'), ('/predict', 'Dự đoán'),
+                      ('/stats', 'Thống kê'), ('/about', 'Giới thiệu')] %}
+      {% for href, label in items %}
+        <a href="{{ href }}" class="{{ 'active' if request.path == href else '' }}">{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </header>
+
+  <main>{% block content %}{% endblock %}</main>
+
+  <footer class="footer">
+    Đồ án môn Khai phá dữ liệu · Dữ liệu: Football-Data.co.uk · Mô hình: Random Forest
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

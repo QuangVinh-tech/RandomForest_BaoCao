@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}EPL Predictor – Dự đoán{% endblock %}
+
+{% block content %}
+<h1 style="text-align:center;font-size:30px">Dự đoán kết quả trận đấu</h1>
+<p class="muted" style="text-align:center">Chọn 2 đội bóng để xem dự đoán từ mô hình Random Forest</p>
+
+<section class="card" style="margin-top:22px">
+  <div class="predict-form">
+    <div><label for="home">Đội chủ nhà</label><select id="home"></select></div>
+    <div><label for="away">Đội khách</label><select id="away"></select></div>
+    <button class="btn" id="go">Dự đoán</button>
+  </div>
+  <p class="note" id="info" style="margin:12px 0 0"></p>
+</section>
+
+<div id="error" class="error hidden" style="margin-top:16px"></div>
+<div id="result" class="hidden"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const homeSel = document.getElementById("home");
+const awaySel = document.getElementById("away");
+const btn = document.getElementById("go");
+const errBox = document.getElementById("error");
+const resBox = document.getElementById("result");
+let SUMMARY = null;
+
+function showError(msg) {
+  errBox.textContent = msg;
+  errBox.classList.remove("hidden");
+}
+
+async function loadTeams() {
+  const [t, s] = await Promise.all([api("/api/teams"), api("/api/summary")]);
+  SUMMARY = s;
+  const opts = t.teams.map(n => `<option>${esc(n)}</option>`).join("");
+  homeSel.innerHTML = opts;
+  awaySel.innerHTML = opts;
+
+  const q = new URLSearchParams(location.search);
+  const h = q.get("home"), a = q.get("away");
+  homeSel.value = t.teams.includes(h) ? h : "Liverpool";
+  awaySel.value = t.teams.includes(a) ? a : "Chelsea";
+  document.getElementById("info").textContent =
+    `Dữ liệu mùa ${t.season}, cập nhật đến ${t.data_until}. Danh sách gồm các đội thi đấu mùa này.`;
+  if (h && a) run();
+}
+
+function formDots(list) {
+  const w = list.filter(x => x === "W").length;
+  const d = list.filter(x => x === "D").length;
+  const l = list.filter(x => x === "L").length;
+  const dots = list.map(x => `<span class="dot ${x}">${x === "W" ? "T" : x === "D" ? "H" : "B"}</span>`).join("");
+  return `<div class="form-dots">${dots}</div>
+          <div class="note">Thắng ${w} · Hòa ${d} · Thua ${l} (cũ → mới)</div>`;
+}
+
+function render(r) {
+  const hw = r.home_win, dr = r.draw, aw = r.away_win;
+  const best = Math.max(hw, dr, aw);
+  const verdict = best === hw ? `${r.home} thắng` : best === aw ? `${r.away} thắng` : "Hòa";
+  const bg = `conic-gradient(var(--accent) 0 ${hw}%, var(--blue) ${hw}% ${hw + dr}%, var(--red) ${hw + dr}% 100%)`;
+
+  resBox.innerHTML = `
+    <section class="card" style="margin-top:18px">
+      <h2><span class="green">▌</span>Kết quả dự đoán</h2>
+      <div class="result-head" style="margin-top:14px">
+        <div class="result-team">${badge(r.home, 84)}<span>${esc(r.home)}</span><small class="muted">Chủ nhà · Elo ${r.home_elo}</small></div>
+        <div class="prob-boxes">
+          <div class="prob-box win ${hw === best ? "best" : ""}"><b>${hw}%</b><small class="muted">Thắng</small></div>
+          <div class="prob-box ${dr === best ? "best" : ""}"><b>${dr}%</b><small class="muted">Hòa</small></div>
+          <div class="prob-box lose ${aw === best ? "best" : ""}"><b>${aw}%</b><small class="muted">Thua</small></div>
+        </div>
+        <div class="result-team">${badge(r.away, 84)}<span>${esc(r.away)}</span><small class="muted">Đội khách · Elo ${r.away_elo}</small></div>
+      </div>
+      <p style="text-align:center;margin:16px 0 0">Mô hình nghiêng về: <b class="green">${esc(verdict)}</b> (${best}%)</p>
+    </section>
+
+    <section class="grid c2" style="margin-top:16px">
+      <div class="card">
+        <h3>Biểu đồ xác suất</h3>
+        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+          <div class="gauge" style="background:${bg}"><div><b>${best}%</b><small class="muted">${esc(verdict)}</small></div></div>
+          <div class="bars" style="flex:1;min-width:200px">
+            <div class="row"><div class="lab"><span>${esc(r.home)} thắng</span><b>${hw}%</b></div><div class="bar"><i style="width:${hw}%;background:var(--accent)"></i></div></div>
+            <div class="row"><div class="lab"><span>Hòa</span><b>${dr}%</b></div><div class="bar"><i style="width:${dr}%;background:var(--blue)"></i></div></div>
+            <div class="row"><div class="lab"><span>${esc(r.away)} thắng</span><b>${aw}%</b></div><div class="bar"><i style="width:${aw}%;background:var(--red)"></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Phong độ 5 trận gần nhất</h3>
+        <div style="margin-top:10px"><b>${esc(r.home)}</b>${formDots(r.home_form)}</div>
+        <div style="margin-top:16px"><b>${esc(r.away)}</b>${formDots(r.away_form)}</div>
+        <p class="note" style="margin-top:14px">T = Thắng, H = Hòa, B = Thua.</p>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <b>Mô hình sử dụng: Random Forest</b>
+        <div class="note">Huấn luyện trên ${SUMMARY.matches.toLocaleString("vi-VN")} trận của ${SUMMARY.seasons} mùa giải. Độ chính xác ${SUMMARY.accuracy}% (mốc cơ sở ${SUMMARY.baseline}%). Đây là xác suất tham khảo, không phải kết quả chắc chắn.</div>
+      </div>
+      <a class="btn ghost small" href="/stats">Xem chi tiết mô hình →</a>
+    </section>`;
+  resBox.classList.remove("hidden");
+}
+
+async function run() {
+  errBox.classList.add("hidden");
+  if (homeSel.value === awaySel.value) {
+    resBox.classList.add("hidden");
+    showError("Hai đội phải khác nhau");
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const r = await api("/api/predict", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({home: homeSel.value, away: awaySel.value})
+    });
+    render(r);
+  } catch (e) {
+    resBox.classList.add("hidden");
+    showError(e.message);
+  }
+  btn.disabled = false;
+}
+
+btn.addEventListener("click", run);
+loadTeams().catch(e => showError(e.message));
+</script>
+{% endblock %}
