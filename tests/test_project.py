@@ -32,7 +32,7 @@ def test_features_csv_hop_le():
     assert len(df) > 1500
     assert df.isna().sum().sum() == 0
     assert set(df["FTR"].unique()) <= {"H", "D", "A"}
-    assert df["Season"].nunique() == 5
+    assert df["Season"].nunique() == 7
 
 
 def test_khong_ro_ri_thoi_gian():
@@ -71,7 +71,7 @@ def client():
     import sys
     spec = importlib.util.spec_from_file_location("epl_app", ROOT / "app" / "app.py")
     module = importlib.util.module_from_spec(spec)
-    sys.modules["epl_app"] = module          # để Flask tìm đúng thư mục templates
+    sys.modules["epl_app"] = module          
     spec.loader.exec_module(module)
     module.app.config["TESTING"] = True
     return module.app.test_client()
@@ -108,3 +108,19 @@ def test_api_history_phan_trang(client):
     data = client.get("/api/history?page=1&per_page=5").get_json()
     assert len(data["items"]) <= 5
     assert data["total"] >= 0
+
+def test_api_eval_nhat_quan(client):
+    d = client.get("/api/eval").get_json()
+    m = client.get("/api/metrics").get_json()
+    h = d["sets"]["holdout"]
+    assert abs(h["accuracy"] - round(m["accuracy"] * 100, 1)) < 0.1
+    assert h["n"] == m["n_test"]
+    for s in d["sets"].values():
+        assert sum(sum(r) for r in s["confusion"]) == s["n"]
+
+def test_h2h_va_thong_ke_mo_rong(predictor):
+    r = predictor.predict("Liverpool", "Chelsea")
+    h = r["h2h"]
+    assert h["home_wins"] + h["draws"] + h["away_wins"] == h["total"]
+    assert len(h["last"]) <= 5
+    assert {"shots", "corners", "yellows"} <= set(r["home_stats"])

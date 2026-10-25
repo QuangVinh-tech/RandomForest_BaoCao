@@ -3,23 +3,52 @@
 
 {% block content %}
 <h1 style="font-size:28px">Giới thiệu về dự án</h1>
-<p class="muted">Tìm hiểu về mô hình, dữ liệu và công nghệ được sử dụng.</p>
+<p class="muted">Tìm hiểu về quy trình, dữ liệu, mô hình và giới hạn của hệ thống.</p>
 
 <section class="card" style="margin-top:20px">
   <h2>Về dự án</h2>
-  <p>EPL Predictor là ứng dụng dự đoán kết quả các trận đấu Ngoại hạng Anh (thắng, hòa, thua) bằng thuật toán Random Forest. Dự án được thực hiện cho môn Khai phá dữ liệu, áp dụng quy trình: thu thập và làm sạch dữ liệu, xây dựng đặc trưng, huấn luyện, đánh giá và triển khai thành ứng dụng web.</p>
+  <p>EPL Predictor dự đoán kết quả các trận đấu Ngoại hạng Anh (thắng, hòa, thua) bằng thuật toán Random Forest. Dự án được thực hiện cho môn Khai phá dữ liệu, đi qua đầy đủ các bước: thu thập và làm sạch dữ liệu, xây dựng đặc trưng, huấn luyện, đánh giá và triển khai thành ứng dụng web.</p>
   <p class="note" id="a-note"></p>
 </section>
 
 <section class="card" style="margin-top:16px">
-  <h2>Quy trình thực hiện</h2>
-  <ol class="steps">
-    <li><b>Dữ liệu:</b> 5 mùa giải 2020/21 đến 2024/25 (1.900 trận) từ Football-Data.co.uk, làm sạch và chuẩn hóa ngày, tên đội.</li>
-    <li><b>Đặc trưng:</b> trung bình 5 trận gần nhất (điểm, bàn thắng, bàn thua, sút trúng đích, số trận thắng) và điểm Elo của từng đội. Mọi đặc trưng chỉ dùng thông tin trước trận đấu để tránh rò rỉ dữ liệu.</li>
-    <li><b>Huấn luyện:</b> Random Forest, chọn tham số bằng cross-validation theo thời gian (TimeSeriesSplit).</li>
-    <li><b>Đánh giá:</b> holdout trên mùa 2024/25 và walk-forward qua 4 mùa; so sánh với mốc cơ sở luôn đoán chủ nhà thắng.</li>
-    <li><b>Triển khai:</b> backend Flask cung cấp API dự đoán, giao diện web hiển thị xác suất thắng, hòa, thua.</li>
-  </ol>
+  <h2>Quy trình xử lý</h2>
+  <div class="flow">
+    <div class="step"><i>1</i><b>Dữ liệu</b><span>CSV các mùa Ngoại hạng Anh từ Football-Data.co.uk</span><code>data/raw/</code></div>
+    <div class="step"><i>2</i><b>Tiền xử lý</b><span>Gộp file, chuẩn hóa ngày và tên đội, bỏ dòng thiếu, sắp xếp theo thời gian</span><code>clean_data.py</code></div>
+    <div class="step"><i>3</i><b>Tạo đặc trưng</b><span>Trung bình 5 trận gần nhất và điểm Elo, chỉ dùng thông tin trước trận</span><code>features.py</code></div>
+    <div class="step"><i>4</i><b>Huấn luyện</b><span>Random Forest, chọn tham số bằng cross-validation theo thời gian</span><code>train.py</code></div>
+    <div class="step"><i>5</i><b>Dự đoán</b><span>Flask nạp mô hình, trả xác suất thắng, hòa, thua cho giao diện</span><code>app.py</code></div>
+  </div>
+</section>
+
+<section class="grid c2" style="margin-top:16px">
+  <div class="card">
+    <h2>Vì sao chọn Random Forest?</h2>
+    <ul>
+      <li><b>Hợp với dữ liệu dạng bảng:</b> các đặc trưng là số (điểm, bàn thắng, Elo), không cần chuẩn hóa thang đo.</li>
+      <li><b>Ổn định hơn một cây quyết định:</b> trung bình nhiều cây học trên mẫu bootstrap và tập đặc trưng ngẫu nhiên nên giảm overfitting, phù hợp bộ dữ liệu nhỏ (khoảng 1.800 trận).</li>
+      <li><b>Cho xác suất:</b> tỷ lệ phiếu bầu của các cây là ước lượng xác suất thắng, hòa, thua, thứ mà trang Dự đoán cần hiển thị.</li>
+      <li><b>Dễ diễn giải:</b> đo được mức độ quan trọng của từng đặc trưng (xem trang Thống kê).</li>
+      <li><b>Nối tiếp bài giảng:</b> Random Forest xây dựng trực tiếp trên cây quyết định (entropy, gini) đã học ở chương phân lớp.</li>
+    </ul>
+    <p class="note">Dự án chưa so sánh với các mô hình khác; mô hình được so với mốc cơ sở luôn đoán chủ nhà thắng.</p>
+  </div>
+  <div class="card">
+    <h2>Dữ liệu và cách đánh giá</h2>
+    <table class="kv">
+      <tr><td>Nguồn dữ liệu</td><td>Football-Data.co.uk (England, Premier League)</td></tr>
+      <tr><td>Khoảng thời gian</td><td><span id="d-range">–</span></td></tr>
+      <tr><td>Các mùa giải</td><td><span id="d-seasons">–</span></td></tr>
+      <tr><td>Số trận</td><td><span id="d-raw">–</span> trận gốc, <span id="d-feat">–</span> trận đủ đặc trưng</td></tr>
+      <tr><td>Tập huấn luyện</td><td id="d-train">–</td></tr>
+      <tr><td>Tập kiểm tra (holdout)</td><td id="d-test">–</td></tr>
+      <tr><td>Chọn tham số</td><td>TimeSeriesSplit 5 phần trên tập huấn luyện, chấm theo log loss</td></tr>
+      <tr><td>Đánh giá bổ sung</td><td>Walk-forward: mỗi mùa được dự đoán bởi mô hình học các mùa trước</td></tr>
+      <tr><td>Mô hình trên web</td><td>Huấn luyện lại trên toàn bộ dữ liệu</td></tr>
+    </table>
+    <p class="note">Việc chia theo thời gian (không xáo trộn ngẫu nhiên) giúp tránh rò rỉ dữ liệu từ tương lai.</p>
+  </div>
 </section>
 
 <section class="card" style="margin-top:16px">
@@ -35,12 +64,14 @@
 
 <section class="grid c2" style="margin-top:16px">
   <div class="card">
-    <h2>Hạn chế cần lưu ý</h2>
+    <h2>Giới hạn của mô hình</h2>
     <ul>
-      <li>Bóng đá có tính ngẫu nhiên cao, mô hình thường chỉ đạt khoảng 50 đến 58% độ chính xác.</li>
-      <li>Mô hình không dự đoán nhãn "Hòa"; hãy xem xác suất hòa thay vì nhãn.</li>
-      <li>Chưa xét chấn thương, đội hình, chuyển nhượng hay lịch thi đấu dày.</li>
-      <li>Dữ liệu dừng ở hết mùa 2024/25. Kết quả chỉ mang tính tham khảo, không dùng để cá cược.</li>
+      <li>Bóng đá có tính ngẫu nhiên cao: độ chính xác chỉ hơn mốc cơ sở khoảng 12 điểm phần trăm.</li>
+      <li>Mô hình không bao giờ dự đoán nhãn "Hòa"; hãy xem xác suất hòa thay vì nhãn.</li>
+      <li>Tập kiểm tra chỉ gần 380 trận, nên độ chính xác có sai số khoảng ±5 điểm phần trăm.</li>
+      <li>Chỉ dùng 15 đặc trưng; chưa xét chấn thương, đội hình, chuyển nhượng hay lịch thi đấu dày.</li>
+      <li>Dữ liệu dừng ở thời điểm cập nhật cuối; đội mới lên hạng bắt đầu với điểm Elo mặc định.</li>
+      <li>Xác suất là ước lượng của mô hình, chỉ mang tính tham khảo, không dùng để cá cược.</li>
     </ul>
   </div>
   <div class="card">
@@ -56,9 +87,16 @@
 
 {% block scripts %}
 <script>
-api("/api/summary").then(s => {
-  document.getElementById("a-note").textContent =
-    `Kết quả hiện tại: độ chính xác ${s.accuracy}% trên mùa ${s.test_season}, so với mốc cơ sở ${s.baseline}%.`;
+Promise.all([api("/api/summary"), api("/api/metrics")]).then(([s, m]) => {
+  const set = (id, text) => { document.getElementById(id).textContent = text; };
+  const seasons = s.season_list;
+  set("a-note", `Kết quả hiện tại: độ chính xác ${s.accuracy}% trên mùa ${s.test_season}, so với mốc cơ sở ${s.baseline}%.`);
+  set("d-range", `${s.date_from} đến ${s.date_to}`);
+  set("d-seasons", `${s.seasons} mùa (${seasons[0]} đến ${seasons[seasons.length - 1]})`);
+  set("d-raw", s.raw_matches.toLocaleString("vi-VN"));
+  set("d-feat", s.matches.toLocaleString("vi-VN"));
+  set("d-train", `${s.n_train} trận, các mùa ${seasons[0]} đến ${seasons[seasons.length - 2]}`);
+  set("d-test", `${s.n_test} trận, mùa ${s.test_season}`);
 }).catch(console.error);
 </script>
 {% endblock %}

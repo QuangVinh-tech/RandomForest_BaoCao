@@ -14,7 +14,7 @@ MODEL = Path("models/rf_epl.joblib")
 METRICS = Path("models/metrics.json")
 
 NON_FEATURES = ["Date", "Season", "HomeTeam", "AwayTeam", "FTR"]
-TEST_SEASON = "2024/25"
+TEST_SEASON = "2025/26"
 SEED = 42
 
 
@@ -27,7 +27,7 @@ def main():
     df = df.sort_values("Date").reset_index(drop=True)
     features = [c for c in df.columns if c not in NON_FEATURES]
 
-    train = df[df["Season"] != TEST_SEASON]
+    train = df[df["Season"] < TEST_SEASON]
     test = df[df["Season"] == TEST_SEASON]
     X_tr, y_tr = train[features], train["FTR"]
     X_te, y_te = test[features], test["FTR"]

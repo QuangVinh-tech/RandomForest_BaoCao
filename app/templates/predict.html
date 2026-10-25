@@ -9,27 +9,35 @@
   <div class="predict-form">
     <div><label for="home">Đội chủ nhà</label><select id="home"></select></div>
     <div><label for="away">Đội khách</label><select id="away"></select></div>
+    <div><label for="mdate">Ngày thi đấu (tùy chọn)</label><input type="date" id="mdate"></div>
     <button class="btn" id="go">Dự đoán</button>
   </div>
   <p class="note" id="info" style="margin:12px 0 0"></p>
 </section>
 
+<div id="warn" class="warn hidden" style="margin-top:16px"></div>
 <div id="error" class="error hidden" style="margin-top:16px"></div>
 <div id="result" class="hidden"></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const homeSel = document.getElementById("home");
-const awaySel = document.getElementById("away");
-const btn = document.getElementById("go");
-const errBox = document.getElementById("error");
-const resBox = document.getElementById("result");
+const $ = id => document.getElementById(id);
+const homeSel = $("home"), awaySel = $("away"), dateIn = $("mdate"), btn = $("go");
+const errBox = $("error"), warnBox = $("warn"), resBox = $("result");
 let SUMMARY = null;
 
 function showError(msg) {
-  errBox.textContent = msg;
+  errBox.textContent = "⚠ " + msg;
   errBox.classList.remove("hidden");
+}
+
+function checkSame() {
+  const same = homeSel.value === awaySel.value;
+  warnBox.textContent = same ? "Bạn đã chọn trùng đội. Hãy chọn hai đội khác nhau để dự đoán." : "";
+  warnBox.classList.toggle("hidden", !same);
+  btn.disabled = same;
+  return same;
 }
 
 async function loadTeams() {
@@ -43,9 +51,25 @@ async function loadTeams() {
   const h = q.get("home"), a = q.get("away");
   homeSel.value = t.teams.includes(h) ? h : "Liverpool";
   awaySel.value = t.teams.includes(a) ? a : "Chelsea";
-  document.getElementById("info").textContent =
-    `Dữ liệu mùa ${t.season}, cập nhật đến ${t.data_until}. Danh sách gồm các đội thi đấu mùa này.`;
+  $("info").textContent =
+    `Mùa giải dữ liệu đang dùng: ${t.season}. Dữ liệu cập nhật đến ${t.data_until}. ` +
+    `Ngày thi đấu chỉ để ghi nhãn: mô hình luôn dùng phong độ tính đến ngày cập nhật này.`;
+  checkSame();
   if (h && a) run();
+}
+
+/* ---------- Thành phần giao diện ---------- */
+function gauge(pct, color, label) {
+  const len = Math.PI * 50;
+  const dash = (len * pct / 100).toFixed(1);
+  return `<div class="g3">
+    <svg viewBox="0 0 120 66" aria-hidden="true">
+      <path d="M10 60 A50 50 0 0 1 110 60" class="g3-bg"/>
+      <path d="M10 60 A50 50 0 0 1 110 60" class="g3-fg" style="stroke:${color};stroke-dasharray:${dash} ${len.toFixed(1)}"/>
+    </svg>
+    <div class="g3-val">${pct}%</div>
+    <div class="g3-lab">${label}</div>
+  </div>`;
 }
 
 function formDots(list) {
@@ -57,51 +81,155 @@ function formDots(list) {
           <div class="note">Thắng ${w} · Hòa ${d} · Thua ${l} (cũ → mới)</div>`;
 }
 
+function explain(r) {
+  const st = r.home_stats, sa = r.away_stats;
+  const probs = [["H", r.home_win], ["D", r.draw], ["A", r.away_win]].sort((x, y) => y[1] - x[1]);
+  const top = probs[0], second = probs[1];
+
+  let head;
+  if (top[0] === "D") {
+    head = `Mô hình thấy hai đội khá cân bằng: <b>Hòa</b> có xác suất cao nhất (${top[1]}%).`;
+  } else if (top[0] === "H") {
+    head = `Mô hình đánh giá <b>${esc(r.home)}</b> cao hơn: khả năng thắng ${top[1]}% (đã tính lợi thế sân nhà).`;
+  } else {
+    head = `Mô hình đánh giá <b>${esc(r.away)}</b> cao hơn dù đá sân khách: khả năng thắng ${top[1]}%.`;
+  }
+
+  const side = (d, eps) => Math.abs(d) < eps ? "hai đội ngang nhau"
+    : (d > 0 ? `nghiêng về ${esc(r.home)}` : `nghiêng về ${esc(r.away)}`);
+  const eloD = r.home_elo - r.away_elo;
+  const ptsD = st.pts - sa.pts;
+  const gd1 = st.gf - st.ga, gd2 = sa.gf - sa.ga;
+
+  const bullets = [
+    `Sức mạnh dài hạn (Elo): ${esc(r.home)} ${r.home_elo} – ${esc(r.away)} ${r.away_elo}, ${side(eloD, 15)}.`,
+    `Phong độ 5 trận (điểm TB/trận): ${st.pts} – ${sa.pts}, ${side(ptsD, 0.2)}.`,
+    `Hiệu số bàn thắng TB/trận: ${gd1.toFixed(2)} – ${gd2.toFixed(2)}, ${side(gd1 - gd2, 0.3)}.`
+  ];
+
+  const gap = top[1] - second[1];
+  const closeNote = gap < 8
+    ? `Chênh lệch giữa hai kết quả cao nhất chỉ ${gap.toFixed(1)} điểm phần trăm, nên đây là trận khó dự đoán.`
+    : `Kết quả cao nhất hơn kết quả kế tiếp ${gap.toFixed(1)} điểm phần trăm.`;
+
+  return `<p style="margin:0">${head}</p>
+    <ul>${bullets.map(b => `<li>${b}</li>`).join("")}</ul>
+    <p class="note" style="margin:10px 0 0">${closeNote} Chỉ các đặc trưng về Elo và phong độ được đưa vào mô hình; các chỉ số cú sút, phạt góc, thẻ và đối đầu bên dưới chỉ để tham khảo. Xác suất là ước lượng, không đảm bảo kết quả thực tế.</p>`;
+}
+
+function vsRows(r) {
+  const st = r.home_stats, sa = r.away_stats;
+  // [nhãn, giá trị nhà, giá trị khách, giá trị lớn hơn là tốt hơn?]
+  const rows = [
+    ["Điểm TB/trận", st.pts, sa.pts, true],
+    ["Bàn thắng TB/trận", st.gf, sa.gf, true],
+    ["Bàn thua TB/trận", st.ga, sa.ga, false],
+    ["Cú sút TB/trận", st.shots, sa.shots, true],
+    ["Sút trúng đích TB/trận", st.sot, sa.sot, true],
+    ["Phạt góc TB/trận", st.corners, sa.corners, true],
+    ["Thẻ vàng TB/trận", st.yellows, sa.yellows, false],
+    ["Số trận thắng / 5 trận", st.wins, sa.wins, true]
+  ];
+  return rows.map(([label, hv, av, higher]) => {
+    const tot = hv + av;
+    const hp = tot ? hv / tot * 100 : 50;
+    const hBest = hv !== av && (higher ? hv > av : hv < av);
+    const aBest = hv !== av && (higher ? av > hv : av < hv);
+    return `<div class="vs-row">
+      <div class="vs-top"><b class="${hBest ? "best" : ""}">${hv}</b><span>${label}</span><b class="${aBest ? "best" : ""}">${av}</b></div>
+      <div class="vs-bar"><i class="l" style="width:${hp.toFixed(1)}%"></i><i class="r" style="width:${(100 - hp).toFixed(1)}%"></i></div>
+    </div>`;
+  }).join("");
+}
+
+function h2hBlock(r) {
+  const h = r.h2h;
+  if (!h.total) {
+    return `<p class="note">Hai đội chưa gặp nhau trong khoảng thời gian của dữ liệu.</p>`;
+  }
+  const pc = n => (n / h.total * 100).toFixed(1);
+  const list = h.last.map(m => {
+    const label = m.winner === "draw" ? "Hòa" : (m.winner === "home" ? `${r.home} thắng` : `${r.away} thắng`);
+    const cls = m.winner === "home" ? "ok" : (m.winner === "away" ? "no" : "dr");
+    return `<tr><td>${m.date}</td><td>${esc(m.home)} <b>${m.score}</b> ${esc(m.away)}</td><td><span class="pill ${cls}">${esc(label)}</span></td></tr>`;
+  }).join("");
+  return `
+    <div class="h2h-sum">
+      <div><b class="green">${h.home_wins}</b><span>${esc(r.home)} thắng</span></div>
+      <div><b>${h.draws}</b><span>Hòa</span></div>
+      <div><b class="red">${h.away_wins}</b><span>${esc(r.away)} thắng</span></div>
+    </div>
+    <div class="h2h-bar">
+      <i style="width:${pc(h.home_wins)}%;background:var(--accent)"></i>
+      <i style="width:${pc(h.draws)}%;background:var(--blue)"></i>
+      <i style="width:${pc(h.away_wins)}%;background:var(--red)"></i>
+    </div>
+    <p class="note">${h.total} trận đối đầu trong dữ liệu · bàn thắng ${h.home_goals} – ${h.away_goals}.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Ngày</th><th>Trận đấu</th><th>Kết quả</th></tr></thead>
+      <tbody>${list}</tbody>
+    </table></div>`;
+}
+
 function render(r) {
   const hw = r.home_win, dr = r.draw, aw = r.away_win;
   const best = Math.max(hw, dr, aw);
   const verdict = best === hw ? `${r.home} thắng` : best === aw ? `${r.away} thắng` : "Hòa";
-  const bg = `conic-gradient(var(--accent) 0 ${hw}%, var(--blue) ${hw}% ${hw + dr}%, var(--red) ${hw + dr}% 100%)`;
+
+  const dmy = r.data_until.split("/").reverse().join("-");
+  const lateNote = (dateIn.value && dateIn.value > dmy)
+    ? `<div class="warn" style="margin-top:12px">Ngày bạn chọn sau thời điểm dữ liệu cuối cùng (${r.data_until}). Mô hình chưa tính các trận diễn ra từ ${r.data_until} đến ngày đó.</div>` : "";
 
   resBox.innerHTML = `
     <section class="card" style="margin-top:18px">
-      <h2><span class="green">▌</span>Kết quả dự đoán</h2>
-      <div class="result-head" style="margin-top:14px">
-        <div class="result-team">${badge(r.home, 84)}<span>${esc(r.home)}</span><small class="muted">Chủ nhà · Elo ${r.home_elo}</small></div>
-        <div class="prob-boxes">
-          <div class="prob-box win ${hw === best ? "best" : ""}"><b>${hw}%</b><small class="muted">Thắng</small></div>
-          <div class="prob-box ${dr === best ? "best" : ""}"><b>${dr}%</b><small class="muted">Hòa</small></div>
-          <div class="prob-box lose ${aw === best ? "best" : ""}"><b>${aw}%</b><small class="muted">Thua</small></div>
-        </div>
-        <div class="result-team">${badge(r.away, 84)}<span>${esc(r.away)}</span><small class="muted">Đội khách · Elo ${r.away_elo}</small></div>
+      <div class="match-head">
+        <div class="mh-team">${badge(r.home, 60)}<div><b class="mh-name g">${esc(r.home)}</b><small>Chủ nhà · Elo ${r.home_elo}</small></div></div>
+        <div class="mh-mid">VS</div>
+        <div class="mh-team right"><div><b class="mh-name r">${esc(r.away)}</b><small>Đội khách · Elo ${r.away_elo}</small></div>${badge(r.away, 60)}</div>
       </div>
-      <p style="text-align:center;margin:16px 0 0">Mô hình nghiêng về: <b class="green">${esc(verdict)}</b> (${best}%)</p>
+      <div class="ctx">
+        <span>Ngày thi đấu: <b>${r.match_date || "chưa chọn"}</b></span>
+        <span>Mùa giải dữ liệu: <b>${esc(r.season)}</b></span>
+        <span>Dữ liệu đến: <b>${r.data_until}</b></span>
+      </div>
+      ${lateNote}
     </section>
 
-    <section class="grid c2" style="margin-top:16px">
-      <div class="card">
-        <h3>Biểu đồ xác suất</h3>
-        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-          <div class="gauge" style="background:${bg}"><div><b>${best}%</b><small class="muted">${esc(verdict)}</small></div></div>
-          <div class="bars" style="flex:1;min-width:200px">
-            <div class="row"><div class="lab"><span>${esc(r.home)} thắng</span><b>${hw}%</b></div><div class="bar"><i style="width:${hw}%;background:var(--accent)"></i></div></div>
-            <div class="row"><div class="lab"><span>Hòa</span><b>${dr}%</b></div><div class="bar"><i style="width:${dr}%;background:var(--blue)"></i></div></div>
-            <div class="row"><div class="lab"><span>${esc(r.away)} thắng</span><b>${aw}%</b></div><div class="bar"><i style="width:${aw}%;background:var(--red)"></i></div></div>
-          </div>
-        </div>
+    <section class="card" style="margin-top:16px">
+      <h3 style="text-align:center">Xác suất kết quả</h3>
+      <div class="gauges">
+        ${gauge(hw, "var(--accent)", esc(r.home) + " thắng")}
+        ${gauge(dr, "var(--blue)", "Hòa")}
+        ${gauge(aw, "var(--red)", esc(r.away) + " thắng")}
       </div>
+      <p style="text-align:center;margin:8px 0 0">Mô hình nghiêng về: <b class="green">${esc(verdict)}</b> (${best}%)</p>
+    </section>
+
+
+    <section class="grid c2" style="margin-top:16px">
       <div class="card">
         <h3>Phong độ 5 trận gần nhất</h3>
         <div style="margin-top:10px"><b>${esc(r.home)}</b>${formDots(r.home_form)}</div>
         <div style="margin-top:16px"><b>${esc(r.away)}</b>${formDots(r.away_form)}</div>
         <p class="note" style="margin-top:14px">T = Thắng, H = Hòa, B = Thua.</p>
       </div>
+      <div class="card">
+        <h3>So sánh chỉ số (TB 5 trận gần nhất)</h3>
+        <div class="vs-head"><span class="g">${esc(r.home)}</span><span class="r">${esc(r.away)}</span></div>
+        ${vsRows(r)}
+        <p class="note">Số màu xanh lá là bên tốt hơn (với bàn thua và thẻ vàng, số thấp hơn là tốt hơn). Độ dài thanh theo tỷ lệ giữa hai giá trị.</p>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h3>Lịch sử đối đầu</h3>
+      ${h2hBlock(r)}
     </section>
 
     <section class="card" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
       <div>
         <b>Mô hình sử dụng: Random Forest</b>
-        <div class="note">Huấn luyện trên ${SUMMARY.matches.toLocaleString("vi-VN")} trận của ${SUMMARY.seasons} mùa giải. Độ chính xác ${SUMMARY.accuracy}% (mốc cơ sở ${SUMMARY.baseline}%). Đây là xác suất tham khảo, không phải kết quả chắc chắn.</div>
+        <div class="note">Huấn luyện trên ${SUMMARY.matches.toLocaleString("vi-VN")} trận của ${SUMMARY.seasons} mùa giải. Độ chính xác ${SUMMARY.accuracy}% trên mùa ${SUMMARY.test_season} (mốc cơ sở ${SUMMARY.baseline}%). Đây là xác suất tham khảo, không phải kết quả chắc chắn.</div>
       </div>
       <a class="btn ghost small" href="/stats">Xem chi tiết mô hình →</a>
     </section>`;
@@ -110,27 +238,30 @@ function render(r) {
 
 async function run() {
   errBox.classList.add("hidden");
-  if (homeSel.value === awaySel.value) {
+  if (checkSame()) {
     resBox.classList.add("hidden");
-    showError("Hai đội phải khác nhau");
     return;
   }
   btn.disabled = true;
+  btn.textContent = "Đang dự đoán...";
   try {
     const r = await api("/api/predict", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({home: homeSel.value, away: awaySel.value})
+      body: JSON.stringify({home: homeSel.value, away: awaySel.value, date: dateIn.value || null})
     });
     render(r);
   } catch (e) {
     resBox.classList.add("hidden");
     showError(e.message);
   }
-  btn.disabled = false;
+  btn.textContent = "Dự đoán";
+  btn.disabled = checkSame();
 }
 
 btn.addEventListener("click", run);
+homeSel.addEventListener("change", checkSame);
+awaySel.addEventListener("change", checkSame);
 loadTeams().catch(e => showError(e.message));
 </script>
 {% endblock %}
