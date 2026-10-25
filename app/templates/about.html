@@ -95,7 +95,7 @@ Promise.all([api("/api/summary"), api("/api/metrics")]).then(([s, m]) => {
   set("d-seasons", `${s.seasons} mùa (${seasons[0]} đến ${seasons[seasons.length - 1]})`);
   set("d-raw", s.raw_matches.toLocaleString("vi-VN"));
   set("d-feat", s.matches.toLocaleString("vi-VN"));
-  set("d-train", `${s.n_train} trận, các mùa ${seasons[0]} đến ${seasons[seasons.length - 2]}`);
+  set("d-train", `${s.n_train} trận, các mùa ${seasons[0]} đến ${seasons.filter(x => x < s.test_season).pop()}`);
   set("d-test", `${s.n_test} trận, mùa ${s.test_season}`);
 }).catch(console.error);
 </script>
