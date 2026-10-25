@@ -1,5 +1,7 @@
 import json
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -9,21 +11,31 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from flask import Flask, jsonify, render_template, request  # noqa: E402
 
+from src import update_data  # noqa: E402
 from src.predictor import Predictor  # noqa: E402
 
 app = Flask(__name__)
 app.json.ensure_ascii = False
-predictor = Predictor()
 
 PROCESSED = ROOT / "data" / "processed"
 METRICS = json.loads((ROOT / "models" / "metrics.json").read_text(encoding="utf-8"))
-FEATURES = pd.read_csv(PROCESSED / "features.csv")
-CLEAN = pd.read_csv(PROCESSED / "matches_clean.csv", parse_dates=["Date"])
 HISTORY_PATH = PROCESSED / "history.csv"
 HISTORY = (pd.read_csv(HISTORY_PATH, parse_dates=["Date"])
            if HISTORY_PATH.exists() else pd.DataFrame())
 
 ORDER = ["H", "D", "A"]
+MIN_MANUAL_GAP = 120   # giây giữa hai lần bấm cập nhật thủ công
+
+
+def load_data():
+    """Nạp (hoặc nạp lại) dữ liệu và bộ dự đoán từ các file đã xử lý."""
+    global predictor, FEATURES, CLEAN
+    predictor = Predictor()
+    FEATURES = pd.read_csv(PROCESSED / "features.csv")
+    CLEAN = pd.read_csv(PROCESSED / "matches_clean.csv", parse_dates=["Date"])
+
+
+load_data()
 
 
 def to_int(value, default, lo, hi):
@@ -184,6 +196,77 @@ def evaluation():
     return jsonify(EVAL)
 
 
+@app.get("/api/status")
+def status():
+    s = update_data.read_status()
+    return jsonify({
+        "data_until": predictor.last_date,
+        "season": predictor.season,
+        "last_check": s.get("last_check"),
+        "last_success": s.get("last_success"),
+        "message": s.get("message", ""),
+        "ok": s.get("ok"),
+    })
+
+
+@app.post("/api/update")
+def update_now():
+    s = update_data.read_status()
+    last = s.get("last_check")
+    if last:
+        try:
+            age = (datetime.now() - datetime.fromisoformat(last)).total_seconds()
+        except ValueError:
+            age = 1e9
+        if age < MIN_MANUAL_GAP:
+            wait = int(MIN_MANUAL_GAP - age)
+            return jsonify({"error": f"Vừa kiểm tra cách đây ít phút. Hãy thử lại sau {wait} giây."}), 429
+
+    result = update_data.update_all()
+    if result.get("busy"):
+        return jsonify({"error": result["message"]}), 409
+    if result.get("changed"):
+        load_data()
+    if not result.get("ok"):
+        return jsonify({"error": result.get("message", "Cập nhật thất bại")}), 502
+    return jsonify(result)
+
+
+@app.get("/api/upcoming")
+def upcoming():
+    limit = to_int(request.args.get("limit"), 8, 1, 20)
+    path = update_data.FIXTURES_PATH
+    if not path.exists():
+        return jsonify({"items": [], "data_until": predictor.last_date,
+                        "note": "Chưa có lịch thi đấu. Bấm “Cập nhật dữ liệu” khi có kết nối mạng."})
+
+    df = pd.read_csv(path, parse_dates=["Date"])
+    today = pd.Timestamp.today().normalize()
+    df = df[df["Date"] >= today]
+    df = df.sort_values(["Date", "Time"] if "Time" in df.columns else ["Date"])
+
+    items = []
+    for r in df.itertuples(index=False):
+        if r.HomeTeam not in predictor.teams or r.AwayTeam not in predictor.teams:
+            continue
+        try:
+            p = predictor.predict(r.HomeTeam, r.AwayTeam)
+        except ValueError:
+            continue
+        t = getattr(r, "Time", None)
+        items.append({
+            "date": r.Date.strftime("%d/%m/%Y"),
+            "time": t if isinstance(t, str) else None,
+            "home": r.HomeTeam, "away": r.AwayTeam,
+            "home_win": p["home_win"], "draw": p["draw"], "away_win": p["away_win"],
+        })
+        if len(items) >= limit:
+            break
+
+    note = "" if items else "Hiện chưa có trận sắp diễn ra trong lịch đã tải."
+    return jsonify({"items": items, "data_until": predictor.last_date, "note": note})
+
+
 @app.get("/api/history")
 def history():
     df = HISTORY.copy()
@@ -233,4 +316,8 @@ def history():
 
 
 if __name__ == "__main__":
+    # Chỉ tự cập nhật khi chạy trực tiếp (không chạy khi kiểm thử).
+    # Đặt EPL_AUTO_UPDATE=0 để tắt, ví dụ khi demo không có mạng.
+    if os.environ.get("EPL_AUTO_UPDATE", "1") != "0":
+        update_data.start_background(on_change=load_data)
     app.run(debug=True, use_reloader=False, port=5000)

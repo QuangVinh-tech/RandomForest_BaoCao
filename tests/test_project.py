@@ -124,3 +124,19 @@ def test_h2h_va_thong_ke_mo_rong(predictor):
     assert h["home_wins"] + h["draws"] + h["away_wins"] == h["total"]
     assert len(h["last"]) <= 5
     assert {"shots", "corners", "yellows"} <= set(r["home_stats"])
+
+def test_season_code():
+    from datetime import date
+    from src.update_data import season_code
+    assert season_code(date(2026, 10, 25)) == "2627"
+    assert season_code(date(2027, 3, 1)) == "2627"
+    assert season_code(date(2026, 6, 30)) == "2526"
+
+
+def test_api_status_va_upcoming(client):
+    s = client.get("/api/status")
+    assert s.status_code == 200
+    assert "data_until" in s.get_json()
+    u = client.get("/api/upcoming")
+    assert u.status_code == 200
+    assert isinstance(u.get_json()["items"], list)

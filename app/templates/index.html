@@ -3,10 +3,10 @@
 
 {% block content %}
 <section class="hero">
-      <img class="hero-logo" src="{{ url_for('static', filename='img/premier-league.png') }}"
+  <img class="hero-logo" src="{{ url_for('static', filename='img/premier-league.png') }}"
        alt="Premier League" onerror="this.remove()">
   <h1>Dự đoán kết quả <span class="green">Ngoại hạng Anh</span><br>bằng mô hình <span class="green">Random Forest</span></h1>
-  <p></p>
+  <p>Ứng dụng Machine Learning phân tích dữ liệu nhiều mùa giải, dự đoán xác suất thắng, hòa, thua của các trận đấu Ngoại hạng Anh.</p>
   <a class="btn" href="/predict">Bắt đầu dự đoán →</a>
 </section>
 
@@ -18,11 +18,18 @@
 </section>
 
 <div class="section-title">
+  <h2>Trận sắp diễn ra</h2>
+  <span class="note" id="up-note"></span>
+</div>
+<section class="grid c4" id="upcoming"></section>
+<p class="note" style="margin-top:10px">Lịch thi đấu và giờ theo nguồn dữ liệu Football-Data.co.uk. Dự đoán dùng phong độ tính đến lần cập nhật dữ liệu gần nhất.</p>
+
+<div class="section-title">
   <h2>Cặp đấu tiêu biểu</h2>
   <a class="green" href="/predict">Tự chọn cặp đấu →</a>
 </div>
 <section class="grid c4" id="featured"></section>
-<p class="note" style="margin-top:14px">Dự đoán dựa trên phong độ 5 trận gần nhất và điểm Elo tính đến hết dữ liệu mùa 2024/25.</p>
+<p class="note" style="margin-top:14px">Dự đoán dựa trên phong độ 5 trận gần nhất và điểm Elo tính đến ngày cập nhật dữ liệu mới nhất.</p>
 {% endblock %}
 
 {% block scripts %}
@@ -30,7 +37,28 @@
 const PAIRS = [["Liverpool", "Chelsea"], ["Arsenal", "Man City"],
                ["Man United", "Newcastle"], ["Tottenham", "Aston Villa"]];
 
-async function init() {
+function probsHtml(w, d, l) {
+  return `<div class="mini-probs">
+    <div class="green"><b>${w}%</b><br><small>Thắng</small></div>
+    <div><b>${d}%</b><br><small>Hòa</small></div>
+    <div class="red"><b>${l}%</b><br><small>Thua</small></div>
+  </div>`;
+}
+
+function matchCard(home, away, w, d, l, when, label) {
+  return `<div class="card match">
+    ${when ? `<div class="when">${esc(when)}</div>` : ""}
+    <div class="teams">
+      <div>${badge(home, 48)}<br><small>${esc(home)}</small></div>
+      <span class="vs">VS</span>
+      <div>${badge(away, 48)}<br><small>${esc(away)}</small></div>
+    </div>
+    ${probsHtml(w, d, l)}
+    <a class="btn small" href="/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}">${label}</a>
+  </div>`;
+}
+
+async function loadSummary() {
   try {
     const s = await api("/api/summary");
     document.getElementById("s-matches").textContent = s.matches.toLocaleString("vi-VN");
@@ -40,7 +68,27 @@ async function init() {
     document.getElementById("s-teams").textContent = s.teams;
     document.getElementById("s-seasons").textContent = s.seasons;
   } catch (e) { console.error(e); }
+}
 
+async function loadUpcoming() {
+  const box = document.getElementById("upcoming");
+  const note = document.getElementById("up-note");
+  try {
+    const d = await api("/api/upcoming?limit=8");
+    if (!d.items.length) {
+      note.textContent = d.note || "Chưa có lịch thi đấu.";
+      return;
+    }
+    box.innerHTML = d.items.map(m =>
+      matchCard(m.home, m.away, m.home_win, m.draw, m.away_win,
+                m.date + (m.time ? " · " + m.time : ""), "Xem chi tiết")).join("");
+  } catch (e) {
+    note.textContent = "Không tải được lịch thi đấu.";
+    console.error(e);
+  }
+}
+
+async function loadFeatured() {
   const box = document.getElementById("featured");
   for (const [home, away] of PAIRS) {
     try {
@@ -48,23 +96,14 @@ async function init() {
         method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({home, away})
       });
-      box.insertAdjacentHTML("beforeend", `
-        <div class="card match">
-          <div class="teams">
-            <div>${badge(home, 48)}<br><small>${esc(home)}</small></div>
-            <span class="vs">VS</span>
-            <div>${badge(away, 48)}<br><small>${esc(away)}</small></div>
-          </div>
-          <div class="mini-probs">
-            <div class="green"><b>${r.home_win}%</b><br><small>Thắng</small></div>
-            <div><b>${r.draw}%</b><br><small>Hòa</small></div>
-            <div class="red"><b>${r.away_win}%</b><br><small>Thua</small></div>
-          </div>
-          <a class="btn small" href="/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}">Dự đoán ngay</a>
-        </div>`);
+      box.insertAdjacentHTML("beforeend",
+        matchCard(home, away, r.home_win, r.draw, r.away_win, "", "Dự đoán ngay"));
     } catch (e) { console.error(e); }
   }
 }
-init();
+
+loadSummary();
+loadUpcoming();
+loadFeatured();
 </script>
 {% endblock %}
