@@ -241,22 +241,39 @@ def upcoming():
                         "note": "Chưa có lịch thi đấu. Bấm “Cập nhật dữ liệu” khi có kết nối mạng."})
 
     df = pd.read_csv(path, parse_dates=["Date"])
-    today = pd.Timestamp.today().normalize()
-    df = df[df["Date"] >= today]
-    df = df.sort_values(["Date", "Time"] if "Time" in df.columns else ["Date"])
+    now_uk = datetime.now(update_data.UK_TZ)
 
-    items = []
+    rows = []
     for r in df.itertuples(index=False):
         if r.HomeTeam not in predictor.teams or r.AwayTeam not in predictor.teams:
             continue
+        t = getattr(r, "Time", None)
+        kickoff = None
+        if isinstance(t, str) and ":" in t:
+            try:
+                kickoff = update_data.uk_to_vn(r.Date, t)
+            except ValueError:
+                kickoff = None
+        if kickoff is not None:
+            if kickoff < now_uk:
+                continue
+            sort_key = kickoff
+        else:
+            if r.Date.date() < now_uk.date():
+                continue
+            sort_key = datetime(r.Date.year, r.Date.month, r.Date.day, tzinfo=update_data.UK_TZ)
+        rows.append((sort_key, kickoff, r))
+    rows.sort(key=lambda x: x[0])
+
+    items = []
+    for _, kickoff, r in rows:
         try:
             p = predictor.predict(r.HomeTeam, r.AwayTeam)
         except ValueError:
             continue
-        t = getattr(r, "Time", None)
         items.append({
-            "date": r.Date.strftime("%d/%m/%Y"),
-            "time": t if isinstance(t, str) else None,
+            "date": (kickoff if kickoff is not None else r.Date).strftime("%d/%m/%Y"),
+            "time": kickoff.strftime("%H:%M") if kickoff is not None else None,
             "home": r.HomeTeam, "away": r.AwayTeam,
             "home_win": p["home_win"], "draw": p["draw"], "away_win": p["away_win"],
         })

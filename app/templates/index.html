@@ -81,7 +81,7 @@ async function loadUpcoming() {
     }
     box.innerHTML = d.items.map(m =>
       matchCard(m.home, m.away, m.home_win, m.draw, m.away_win,
-                m.date + (m.time ? " · " + m.time : ""), "Xem chi tiết")).join("");
+                m.date + (m.time ? " · " + m.time + " (GMT+7)" : ""), "Xem chi tiết")).join("");
   } catch (e) {
     note.textContent = "Không tải được lịch thi đấu.";
     console.error(e);

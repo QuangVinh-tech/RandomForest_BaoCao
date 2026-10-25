@@ -23,7 +23,16 @@ FIXTURES_URL = f"{BASE}/fixtures.csv"
 USER_AGENT = "Mozilla/5.0 (EPL-Predictor student project)"
 REQUIRED = {"Date", "HomeTeam", "AwayTeam", "FTHG", "FTAG", "FTR"}
 LOCK = threading.Lock()
+from zoneinfo import ZoneInfo  
 
+UK_TZ = ZoneInfo("Europe/London")
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def uk_to_vn(d, time_str):
+    """Đổi giờ bắt đầu trận (giờ địa phương Anh) sang giờ Việt Nam. time_str dạng 'HH:MM'."""
+    hh, mm = (int(x) for x in time_str.split(":")[:2])
+    return datetime(d.year, d.month, d.day, hh, mm, tzinfo=UK_TZ).astimezone(VN_TZ)
 
 def season_code(today=None):
     """Mã mùa của Football-Data: tháng 7 trở đi thuộc mùa bắt đầu năm đó (2026-10 -> '2627')."""
